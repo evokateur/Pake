@@ -16,8 +16,15 @@ use app::{
         clear_cache_and_restart, clear_dock_badge, download_file, increment_dock_badge,
         send_notification, set_dock_badge, set_dock_badge_label, update_theme_mode,
     },
+    launch::{
+        contains_url_arg, decide_launch_target, parse_launch_url_args, validate_launch_url,
+        LaunchRequestSource, LaunchTarget,
+    },
     setup::{set_global_shortcut, set_system_tray},
-    window::{open_additional_window_safe, set_window, MultiWindowState},
+    window::{
+        navigate_main_window_to_url, open_additional_window_safe, open_additional_window_with_url,
+        set_window, set_window_with_url, MultiWindowState,
+    },
 };
 use util::get_pake_config;
 
@@ -42,7 +49,16 @@ pub fn run_app() {
     let start_to_tray = pake_config.windows[0].start_to_tray && show_system_tray; // Only valid when tray is enabled
     let multi_instance = pake_config.multi_instance;
     let multi_window = pake_config.multi_window;
+    let accept_url_args = pake_config.accept_url_args;
     let _enable_find = pake_config.windows[0].enable_find;
+    let launch_window_config = pake_config.windows[0].clone();
+    let run_window_config = launch_window_config.clone();
+    let startup_launch_url = if accept_url_args {
+        let args = std::env::args().skip(1).collect::<Vec<_>>();
+        parse_launch_url_args(&args, &launch_window_config)
+    } else {
+        None
+    };
 
     let window_state_plugin = WindowStatePlugin::default()
         .with_state_flags(if init_fullscreen {
@@ -64,8 +80,31 @@ pub fn run_app() {
 
     // Only add single instance plugin if multiple instances are not allowed
     if !multi_instance {
+        let single_instance_window_config = launch_window_config.clone();
         app_builder = app_builder.plugin(tauri_plugin_single_instance::init(
-            move |app, _args, _cwd| {
+            move |app, args, _cwd| {
+                if accept_url_args {
+                    if let Some(url) = parse_launch_url_args(&args, &single_instance_window_config)
+                    {
+                        match decide_launch_target(LaunchRequestSource::CommandLine, multi_window) {
+                            LaunchTarget::ExistingWindow => {
+                                let _ = navigate_main_window_to_url(app, &url);
+                            }
+                            LaunchTarget::NewWindow => {
+                                if let Ok(window) = open_additional_window_with_url(app, url) {
+                                    let _ = window.show();
+                                    let _ = window.set_focus();
+                                }
+                            }
+                        }
+                        return;
+                    }
+
+                    if contains_url_arg(&args) {
+                        return;
+                    }
+                }
+
                 if multi_window {
                     open_additional_window_safe(app);
                 } else if let Some(window) = app.get_webview_window("pake") {
@@ -106,7 +145,12 @@ pub fn run_app() {
             }
             // --- Menu Construction End ---
 
-            let window = set_window(app.app_handle(), &pake_config, &tauri_config)?;
+            let window = match startup_launch_url.clone() {
+                Some(url) => {
+                    set_window_with_url(app.app_handle(), &pake_config, &tauri_config, url)?
+                }
+                None => set_window(app.app_handle(), &pake_config, &tauri_config)?,
+            };
             set_system_tray(
                 app.app_handle(),
                 show_system_tray,
@@ -181,7 +225,29 @@ pub fn run_app() {
             eprintln!("[Pake] Fatal error while building Tauri application: {error}");
             std::process::exit(1);
         })
-        .run(|_app, _event| {
+        .run(move |_app, _event| {
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Opened { ref urls } = _event {
+                if accept_url_args {
+                    if let Some(url) = urls
+                        .iter()
+                        .find_map(|url| validate_launch_url(url.as_str(), &run_window_config))
+                    {
+                        match decide_launch_target(LaunchRequestSource::OpenedEvent, multi_window) {
+                            LaunchTarget::ExistingWindow => {
+                                let _ = navigate_main_window_to_url(_app, &url);
+                            }
+                            LaunchTarget::NewWindow => {
+                                if let Ok(window) = open_additional_window_with_url(_app, url) {
+                                    let _ = window.show();
+                                    let _ = window.set_focus();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // Handle macOS dock icon click to reopen hidden window
             #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Reopen {

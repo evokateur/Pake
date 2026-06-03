@@ -85,6 +85,8 @@ pub struct PakeConfig {
     pub multi_instance: bool,
     #[serde(default)]
     pub multi_window: bool,
+    #[serde(default)]
+    pub accept_url_args: bool,
 }
 
 impl PakeConfig {
