@@ -1,4 +1,8 @@
 use super::config::WindowConfig;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Mutex,
+};
 use tauri::Url;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -11,6 +15,37 @@ pub enum LaunchRequestSource {
 pub enum LaunchTarget {
     ExistingWindow,
     NewWindow,
+}
+
+#[derive(Debug)]
+pub struct LaunchUrlState {
+    pending_url: Mutex<Option<Url>>,
+    ready: AtomicBool,
+}
+
+impl LaunchUrlState {
+    pub fn new(pending_url: Option<Url>) -> Self {
+        Self {
+            pending_url: Mutex::new(pending_url),
+            ready: AtomicBool::new(false),
+        }
+    }
+
+    pub fn take_startup_url(&self) -> Option<Url> {
+        self.pending_url.lock().unwrap().take()
+    }
+
+    pub fn replace_pending_url(&self, url: Url) {
+        *self.pending_url.lock().unwrap() = Some(url);
+    }
+
+    pub fn mark_ready(&self) {
+        self.ready.store(true, Ordering::Release);
+    }
+
+    pub fn is_ready(&self) -> bool {
+        self.ready.load(Ordering::Acquire)
+    }
 }
 
 fn is_allowed_scheme(url: &Url) -> bool {
@@ -221,5 +256,42 @@ mod tests {
     fn contains_url_arg_ignores_non_urls() {
         let args = vec!["--flag".to_string(), "not-a-url".to_string()];
         assert!(!contains_url_arg(&args));
+    }
+
+    #[test]
+    fn launch_url_state_returns_seeded_startup_url_once() {
+        let state = LaunchUrlState::new(Some(
+            Url::parse("https://en.wikipedia.org/wiki/Main_Page").unwrap(),
+        ));
+
+        assert_eq!(
+            state.take_startup_url().unwrap().as_str(),
+            "https://en.wikipedia.org/wiki/Main_Page"
+        );
+        assert!(state.take_startup_url().is_none());
+    }
+
+    #[test]
+    fn launch_url_state_allows_pending_url_replacement_before_ready() {
+        let state = LaunchUrlState::new(None);
+        let first = Url::parse("https://en.wikipedia.org/wiki/Rust").unwrap();
+        let second = Url::parse("https://en.wikipedia.org/wiki/Genghis_Khan").unwrap();
+
+        state.replace_pending_url(first);
+        state.replace_pending_url(second);
+
+        assert_eq!(
+            state.take_startup_url().unwrap().as_str(),
+            "https://en.wikipedia.org/wiki/Genghis_Khan"
+        );
+    }
+
+    #[test]
+    fn launch_url_state_tracks_ready_transition() {
+        let state = LaunchUrlState::new(None);
+
+        assert!(!state.is_ready());
+        state.mark_ready();
+        assert!(state.is_ready());
     }
 }

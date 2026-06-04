@@ -18,7 +18,7 @@ use app::{
     },
     launch::{
         contains_url_arg, decide_launch_target, parse_launch_url_args, validate_launch_url,
-        LaunchRequestSource, LaunchTarget,
+        LaunchRequestSource, LaunchTarget, LaunchUrlState,
     },
     setup::{set_global_shortcut, set_system_tray},
     window::{
@@ -71,6 +71,11 @@ pub fn run_app() {
 
     #[allow(deprecated)]
     let mut app_builder = tauri_app
+        .manage(MultiWindowState::new(
+            pake_config.clone(),
+            tauri_config.clone(),
+        ))
+        .manage(LaunchUrlState::new(startup_launch_url))
         .plugin(window_state_plugin)
         .plugin(tauri_plugin_oauth::init())
         .plugin(tauri_plugin_http::init())
@@ -128,11 +133,6 @@ pub fn run_app() {
             clear_cache_and_restart,
         ])
         .setup(move |app| {
-            app.manage(MultiWindowState::new(
-                pake_config.clone(),
-                tauri_config.clone(),
-            ));
-
             // --- Menu Construction Start ---
             #[cfg(target_os = "macos")]
             {
@@ -145,12 +145,17 @@ pub fn run_app() {
             }
             // --- Menu Construction End ---
 
-            let window = match startup_launch_url.clone() {
+            let launch_url_state = app.state::<LaunchUrlState>();
+            let startup_launch_url = launch_url_state.take_startup_url();
+
+            let window = match startup_launch_url {
                 Some(url) => {
                     set_window_with_url(app.app_handle(), &pake_config, &tauri_config, url)?
                 }
                 None => set_window(app.app_handle(), &pake_config, &tauri_config)?,
             };
+            launch_url_state.mark_ready();
+
             set_system_tray(
                 app.app_handle(),
                 show_system_tray,
@@ -233,6 +238,12 @@ pub fn run_app() {
                         .iter()
                         .find_map(|url| validate_launch_url(url.as_str(), &run_window_config))
                     {
+                        let launch_url_state = _app.state::<LaunchUrlState>();
+                        if !launch_url_state.is_ready() {
+                            launch_url_state.replace_pending_url(url);
+                            return;
+                        }
+
                         match decide_launch_target(LaunchRequestSource::OpenedEvent, multi_window) {
                             LaunchTarget::ExistingWindow => {
                                 let _ = navigate_main_window_to_url(_app, &url);
