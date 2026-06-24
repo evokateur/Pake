@@ -175,6 +175,14 @@ ${green('|_|   \\__,_|_|\\_\\___|  can turn any webpage into a desktop app with 
         .hideHelp(),
     )
     .addOption(
+      new Option(
+        '--accept-url-args',
+        'Accept launch URLs from command-line or app-open events',
+      )
+        .default(DEFAULT.acceptUrlArgs)
+        .hideHelp(),
+    )
+    .addOption(
       new Option('--start-to-tray', 'Start app minimized to tray')
         .default(DEFAULT.startToTray)
         .hideHelp(),

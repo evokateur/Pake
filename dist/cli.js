@@ -663,7 +663,7 @@ async function mergeIcons(options, name, tauriConf, platform, safeAppName) {
     delete tauriConf.app.trayIcon;
 }
 async function injectCustomCode(options, tauriConf) {
-    const { inject, proxyUrl, multiInstance, multiWindow, wasm } = options;
+    const { inject, proxyUrl, multiInstance, multiWindow, acceptUrlArgs, wasm, } = options;
     const injectFilePath = path.join(npmDirectory, 'src-tauri/src/inject/custom.js');
     if (inject?.length > 0) {
         const injectArray = Array.isArray(inject) ? inject : [inject];
@@ -682,6 +682,7 @@ async function injectCustomCode(options, tauriConf) {
     tauriConf.pake.proxy_url = proxyUrl || '';
     tauriConf.pake.multi_instance = multiInstance;
     tauriConf.pake.multi_window = multiWindow;
+    tauriConf.pake.accept_url_args = acceptUrlArgs;
     if (wasm) {
         tauriConf.app.security = {
             headers: {
@@ -2426,6 +2427,7 @@ const DEFAULT_PAKE_OPTIONS = {
     keepBinary: false,
     multiInstance: false,
     multiWindow: false,
+    acceptUrlArgs: false,
     startToTray: false,
     forceInternalNavigation: false,
     internalUrlRegex: '',
@@ -2559,6 +2561,9 @@ ${green('|_|   \\__,_|_|\\_\\___|  can turn any webpage into a desktop app with 
         .hideHelp())
         .addOption(new Option('--multi-window', 'Allow opening multiple windows within one app instance')
         .default(DEFAULT_PAKE_OPTIONS.multiWindow)
+        .hideHelp())
+        .addOption(new Option('--accept-url-args', 'Accept launch URLs from command-line or app-open events')
+        .default(DEFAULT_PAKE_OPTIONS.acceptUrlArgs)
         .hideHelp())
         .addOption(new Option('--start-to-tray', 'Start app minimized to tray')
         .default(DEFAULT_PAKE_OPTIONS.startToTray)

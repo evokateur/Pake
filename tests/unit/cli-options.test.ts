@@ -46,4 +46,14 @@ describe('CLI options', () => {
     expect(option?.defaultValue).toBe(false);
     expect(option?.hidden).toBe(true);
   });
+
+  it('registers hidden --accept-url-args option', () => {
+    const option = program.options.find(
+      (item) => item.long === '--accept-url-args',
+    );
+
+    expect(option).toBeDefined();
+    expect(option?.defaultValue).toBe(false);
+    expect(option?.hidden).toBe(true);
+  });
 });

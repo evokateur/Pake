@@ -57,13 +57,44 @@ pub fn set_window(
     config: &PakeConfig,
     tauri_config: &Config,
 ) -> tauri::Result<WebviewWindow> {
-    build_window_with_label(app, config, tauri_config, "pake")
+    build_window_with_label(app, config, tauri_config, "pake", None)
+}
+
+pub fn set_window_with_url(
+    app: &AppHandle,
+    config: &PakeConfig,
+    tauri_config: &Config,
+    url: Url,
+) -> tauri::Result<WebviewWindow> {
+    build_window_with_label(
+        app,
+        config,
+        tauri_config,
+        "pake",
+        Some(WebviewUrl::External(url)),
+    )
 }
 
 pub fn open_additional_window(app: &AppHandle) -> tauri::Result<WebviewWindow> {
     let state = app.state::<MultiWindowState>();
     let label = state.next_window_label();
-    build_window_with_label(app, &state.pake_config, &state.tauri_config, &label)
+    build_window_with_label(app, &state.pake_config, &state.tauri_config, &label, None)
+}
+
+pub fn open_additional_window_with_url(app: &AppHandle, url: Url) -> tauri::Result<WebviewWindow> {
+    let state = app.state::<MultiWindowState>();
+    let label = state.next_window_label();
+    let window = build_window_with_label(
+        app,
+        &state.pake_config,
+        &state.tauri_config,
+        &label,
+        Some(WebviewUrl::External(url)),
+    )?;
+    let current_url = window.url()?;
+    let title = current_url.host_str().unwrap_or(current_url.as_str());
+    let _ = window.set_title(title);
+    Ok(window)
 }
 
 struct WindowBuildOptions<'a> {
@@ -122,11 +153,32 @@ pub fn open_additional_window_safe(app: &AppHandle) {
     }
 }
 
+fn apply_navigation_to_window(window: &WebviewWindow, url: &Url) -> tauri::Result<()> {
+    window.navigate(url.clone())?;
+    let title = url.host_str().unwrap_or(url.as_str());
+    let _ = window.set_title(title);
+    let _ = window.unminimize();
+    let _ = window.show();
+    let _ = window.set_focus();
+    Ok(())
+}
+
+pub fn navigate_main_window_to_url(app: &AppHandle, url: &Url) -> tauri::Result<()> {
+    let window = app.get_webview_window("pake").ok_or_else(|| {
+        tauri::Error::Io(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "main pake window not found",
+        ))
+    })?;
+    apply_navigation_to_window(&window, url)
+}
+
 fn build_window_with_label(
     app: &AppHandle,
     config: &PakeConfig,
     tauri_config: &Config,
     label: &str,
+    override_url: Option<WebviewUrl>,
 ) -> tauri::Result<WebviewWindow> {
     let window_config = config.windows.first().ok_or_else(|| {
         tauri::Error::Io(std::io::Error::new(
@@ -134,26 +186,29 @@ fn build_window_with_label(
             "pake.json must define at least one window configuration",
         ))
     })?;
-    let url = match window_config.url_type.as_str() {
-        "web" => {
-            let parsed = window_config.url.parse().map_err(|err| {
-                tauri::Error::Io(std::io::Error::new(
+    let url = match override_url {
+        Some(url) => url,
+        None => match window_config.url_type.as_str() {
+            "web" => {
+                let parsed = window_config.url.parse().map_err(|err| {
+                    tauri::Error::Io(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        format!(
+                            "Invalid 'web' url '{}' in pake.json: {err}",
+                            window_config.url
+                        ),
+                    ))
+                })?;
+                WebviewUrl::App(parsed)
+            }
+            "local" => WebviewUrl::App(PathBuf::from(&window_config.url)),
+            other => {
+                return Err(tauri::Error::Io(std::io::Error::new(
                     std::io::ErrorKind::InvalidInput,
-                    format!(
-                        "Invalid 'web' url '{}' in pake.json: {err}",
-                        window_config.url
-                    ),
-                ))
-            })?;
-            WebviewUrl::App(parsed)
-        }
-        "local" => WebviewUrl::App(PathBuf::from(&window_config.url)),
-        other => {
-            return Err(tauri::Error::Io(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                format!("url_type must be 'web' or 'local', got '{other}'"),
-            )));
-        }
+                    format!("url_type must be 'web' or 'local', got '{other}'"),
+                )));
+            }
+        },
     };
 
     build_window(

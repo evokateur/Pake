@@ -38,5 +38,6 @@
   "inject": [],
   "proxy_url": "",
   "multi_instance": false,
-  "multi_window": false
+  "multi_window": false,
+  "accept_url_args": false
 }

@@ -99,6 +99,9 @@ export interface PakeCliOptions {
   // Allow opening multiple windows in one app instance, default false
   multiWindow: boolean;
 
+  // Accept a launch URL from command-line / app-open events, default false
+  acceptUrlArgs: boolean;
+
   // Start app minimized to tray, default false
   startToTray: boolean;
 
@@ -186,6 +189,7 @@ export interface PakeConfig {
   proxy_url: string;
   multi_instance: boolean;
   multi_window: boolean;
+  accept_url_args: boolean;
   inject?: string[];
 }
 
