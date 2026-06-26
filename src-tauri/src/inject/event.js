@@ -281,12 +281,31 @@ function canNavigateAuthUrl(url) {
   return normalizedUrl !== "" && normalizedUrl !== "about:blank";
 }
 
+function isAppleAuthNavigation(url, name) {
+  if (name === "AppleAuthentication") {
+    return true;
+  }
+
+  try {
+    return (
+      new URL(url, window.location.href).hostname.toLowerCase() ===
+      "appleid.apple.com"
+    );
+  } catch (e) {
+    return false;
+  }
+}
+
 function navigateInCurrentWindow(url) {
   window.location.href = url;
   return window;
 }
 
 function openAuthNavigation(originalWindowOpen, url, name, specs) {
+  if (isAppleAuthNavigation(url, name)) {
+    return originalWindowOpen.call(window, url, name, specs);
+  }
+
   if (shouldNavigateAuthInCurrentWindow() && canNavigateAuthUrl(url)) {
     return navigateInCurrentWindow(url);
   }
