@@ -281,14 +281,14 @@ function canNavigateAuthUrl(url) {
   return normalizedUrl !== "" && normalizedUrl !== "about:blank";
 }
 
-function isAppleAuthNavigation(url, name) {
+function isAppleAuthPopup(url, name) {
   if (name === "AppleAuthentication") {
     return true;
   }
 
   try {
     return (
-      new URL(url, window.location.href).hostname.toLowerCase() ===
+      new URL(url, window.location.origin).hostname.toLowerCase() ===
       "appleid.apple.com"
     );
   } catch (e) {
@@ -302,7 +302,7 @@ function navigateInCurrentWindow(url) {
 }
 
 function openAuthNavigation(originalWindowOpen, url, name, specs) {
-  if (isAppleAuthNavigation(url, name)) {
+  if (isAppleAuthPopup(url, name)) {
     return originalWindowOpen.call(window, url, name, specs);
   }
 
