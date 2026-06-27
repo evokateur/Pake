@@ -210,6 +210,64 @@ describe("event link guard", () => {
     expect(result).toBe(popup);
   });
 
+  it("keeps named Apple auth popups on the native popup path on macOS", () => {
+    const popup = {};
+    const { openAuthNavigation, window } = loadEventHelpers({
+      userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 15_5)",
+    });
+    const openCalls = [];
+    const originalWindowOpen = (url, name, specs) => {
+      openCalls.push({ url, name, specs });
+      return popup;
+    };
+
+    const result = openAuthNavigation(
+      originalWindowOpen,
+      "https://appleid.apple.com/auth/authorize",
+      "AppleAuthentication",
+      "width=1200,height=800",
+    );
+
+    expect(openCalls).toEqual([
+      {
+        url: "https://appleid.apple.com/auth/authorize",
+        name: "AppleAuthentication",
+        specs: "width=1200,height=800",
+      },
+    ]);
+    expect(window.location.href).toBe("https://example.com/app");
+    expect(result).toBe(popup);
+  });
+
+  it("keeps Apple auth URL popups on the native popup path on macOS", () => {
+    const popup = {};
+    const { openAuthNavigation, window } = loadEventHelpers({
+      userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 15_5)",
+    });
+    const openCalls = [];
+    const originalWindowOpen = (url, name, specs) => {
+      openCalls.push({ url, name, specs });
+      return popup;
+    };
+
+    const result = openAuthNavigation(
+      originalWindowOpen,
+      "https://appleid.apple.com/auth/authorize",
+      "_blank",
+      "width=1200,height=800",
+    );
+
+    expect(openCalls).toEqual([
+      {
+        url: "https://appleid.apple.com/auth/authorize",
+        name: "_blank",
+        specs: "width=1200,height=800",
+      },
+    ]);
+    expect(window.location.href).toBe("https://example.com/app");
+    expect(result).toBe(popup);
+  });
+
   it("navigates target blank auth links in-place when new-window is disabled", () => {
     const context = loadEventHelpers({ withTauri: true });
     context.window.pakeConfig = { new_window: false };
